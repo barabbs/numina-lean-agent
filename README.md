@@ -9,7 +9,7 @@
 
 <br>
 
-An agent built on Claude Code for Lean theorem proving tasks. We used this system to prove all 12 problems from Putnam 2025, and completed a paper-level formalization of [Effective Brascamp-Lieb inequalities](https://arxiv.org/abs/2511.11091).
+An agent built on Claude Code for formal theorem proving tasks. We used this system to prove all 12 problems from Putnam 2025, and completed a paper-level formalization of [Effective Brascamp-Lieb inequalities](https://arxiv.org/abs/2511.11091).
 
 ## System Overview
 
