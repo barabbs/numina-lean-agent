@@ -9,8 +9,8 @@ This guide helps you quickly set up a Lean + Claude Code development environment
 ### Option 1: Use the script
 
 ```bash
-git clone https://github.com/project-numina/lean-agent
-cd lean-agent/tutorial
+git clone https://github.com/project-numina/numina-lean-agent
+cd numina-lean-agent/tutorial
 ./setup.sh myproject
 ```
 
