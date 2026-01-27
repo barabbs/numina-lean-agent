@@ -57,6 +57,18 @@ python -m scripts.run_claude from-folder leanproblems/Minif2f \
 - [lean4-skills](https://github.com/cameronfreer/lean4-skills) - Claude Code skills for Lean 4
 - [Leandex](https://leandex.projectnumina.ai) - Semantic search for Lean codebases
 
+## Citation
+If you find the content of this project helpful, please cite our paper as follows:
+
+```
+@article{liu2026numina,
+  title={Numina-Lean-Agent: An Open and General Agentic Reasoning System for Formal Mathematics},
+  author={Liu, Junqi and Zhou, Zihao and Zhu, Zekai and Santos, Marco Dos and He, Weikun and Liu, Jiawei and Wang, Ran and Xie, Yunzhou and Zhao, Junqiao and Wang, Qiufeng and others},
+  journal={arXiv preprint arXiv:2601.14027},
+  year={2026}
+}
+```
+
 ## License
 
 MIT License
