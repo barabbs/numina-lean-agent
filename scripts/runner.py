@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import time
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional, List, Literal
@@ -36,9 +37,9 @@ def get_line_counts(files: List[Path]) -> dict:
 
 
 def run_claude_once(
-    args: List[str],
-    env: Optional[dict] = None,
-    cwd: Optional[Path] = None,
+        args: List[str],
+        env: Optional[dict] = None,
+        cwd: Optional[Path] = None,
 ) -> tuple[str, Optional[str], int]:
     """
     Execute a single claude command.
@@ -79,28 +80,28 @@ def commit_round(round_num: int, cwd: Optional[Path] = None):
     try:
         subprocess.run(["git", "add", "-A"], check=True, **kwargs)
         subprocess.run(["git", "commit", "-m", msg], check=True, **kwargs)
-        print(f"[info] Committed: {msg}")
+        logging.info(f"Committed: {msg}")
     except subprocess.CalledProcessError as e:
-        print(f"[warn] Round {round_num}: git commit failed - {e} (possibly no changes to commit)")
+        logging.warning(f"Round {round_num}: git commit failed - {e} (possibly no changes to commit)")
     except Exception as e:
-        print(f"[error] Round {round_num}: unexpected error during git commit - {e}")
+        logging.error(f"Round {round_num}: unexpected error during git commit - {e}")
 
 
 def run_claude_session(
-    prompt: str,
-    cwd: Optional[Path] = None,
-    permission_mode: str = "bypassPermissions",
-    output_format: Optional[str] = None,
-    max_rounds: int = 20,
-    sleep_between_rounds: float = 1.0,
-    env: Optional[dict] = None,
-    on_complete: Optional[Callable[[], bool]] = None,
-    tracker: Optional[StatementTracker] = None,
-    on_statement_change: Literal["error", "warn"] = "warn",
-    git_commit_dir: Optional[Path] = None,
-    result_dir: Optional[Path] = None,
-    task_id: Optional[str] = None,
-    files_to_track: Optional[List[Path]] = None,
+        prompt: str,
+        cwd: Optional[Path] = None,
+        permission_mode: str = "bypassPermissions",
+        output_format: Optional[str] = None,
+        max_rounds: int = 20,
+        sleep_between_rounds: float = 1.0,
+        env: Optional[dict] = None,
+        on_complete: Optional[Callable[[], bool]] = None,
+        tracker: Optional[StatementTracker] = None,
+        on_statement_change: Literal["error", "warn"] = "warn",
+        git_commit_dir: Optional[Path] = None,
+        result_dir: Optional[Path] = None,
+        task_id: Optional[str] = None,
+        files_to_track: Optional[List[Path]] = None,
 ) -> tuple[str, int, List[RoundResult]]:
     """
     Run a complete Claude session with automatic continue logic.
@@ -123,7 +124,7 @@ def run_claude_session(
     Returns:
         (end_reason, rounds_used, round_results)
     """
-    print(f"[info] Using prompt:\n{prompt[:120]}{'...' if len(prompt) > 120 else ''}\n")
+    logging.debug(f"Using prompt:\n{prompt[:120]}{'...' if len(prompt) > 120 else ''}\n")
 
     # Build base command
     base = ["claude", "-p"]
@@ -136,7 +137,8 @@ def run_claude_session(
     statement_error = False
     initial_line_counts = get_line_counts(files_to_track) if files_to_track else {}
 
-    def record_round(round_num: int, stdout: str, reason: Optional[str], returncode: int, duration: float) -> RoundResult:
+    def record_round(round_num: int, stdout: str, reason: Optional[str], returncode: int,
+                     duration: float) -> RoundResult:
         """Record a round result and check for statement changes."""
         nonlocal statement_error
 
@@ -157,14 +159,14 @@ def run_claude_session(
         # Handle statement changes
         if changes:
             if on_statement_change == "error":
-                print(f"\n[error] Statement changed in round {round_num}! Stopping.")
+                logging.error(f"Statement changed in round {round_num}! Stopping.")
                 for c in changes:
-                    print(f"  {c}")
+                    logging.error(f"  {c}")
                 statement_error = True
             else:
-                print(f"\n[warn] Statement changed in round {round_num}:")
+                logging.warning(f"Statement changed in round {round_num}:")
                 for c in changes:
-                    print(f"  {c}")
+                    logging.warning(f"  {c}")
 
         # Print line count changes
         if line_counts and initial_line_counts:
@@ -188,16 +190,15 @@ def run_claude_session(
                             prev_changes.append((filename, prev_counts[filename], current, diff, ratio))
 
             if init_changes:
-                print(f"[info] Line changes (vs initial):")
+                logging.debug(f"Line changes (vs initial):")
                 for filename, initial, final, diff, ratio in init_changes:
                     sign = "+" if diff > 0 else ""
-                    print(f"  {filename}: {initial} -> {final} ({sign}{diff}, {ratio:+.1f}%)")
+                    logging.debug(f"  {filename}: {initial} -> {final} ({sign}{diff}, {ratio:+.1f}%)")
             if prev_changes:
-                print(f"[info] Line changes (vs prev round):")
+                logging.debug(f"Line changes (vs prev round):")
                 for filename, prev, final, diff, ratio in prev_changes:
                     sign = "+" if diff > 0 else ""
-                    print(f"  {filename}: {prev} -> {final} ({sign}{diff}, {ratio:+.1f}%)")
-
+                    logging.debug(f"  {filename}: {prev} -> {final} ({sign}{diff}, {ratio:+.1f}%)")
 
         # Save round result immediately if result_dir is specified
         if result_dir and task_id:
@@ -206,7 +207,8 @@ def run_claude_session(
             round_file = result_path / f"round_{round_num}.json"
             with open(round_file, "w", encoding="utf-8") as f:
                 json.dump(result.to_dict(), f, indent=2, ensure_ascii=False)
-            print(f"[info] Round {round_num} completed in {result.duration_seconds:.1f}s, result saved to {round_file}")
+            logging.debug(
+                f"Round {round_num} completed in {result.duration_seconds:.1f}s, result saved to {round_file}")
 
         return result
 
@@ -226,27 +228,24 @@ def run_claude_session(
     max_consecutive_limits = 2  # Reset session after 2 consecutive LIMITs
 
     while reason == "LIMIT" or reason is None or reason == "COMPLETE" or reason == "SELECTED_TARGET_COMPLETE":
-        print("=" * 60)
+        # print("=" * 60)
 
         if rounds >= max_rounds:
-            print(
-                f"\n[warn] Reached maximum round count {max_rounds}, stopping.",
-                file=sys.stderr,
-            )
+            logging.error(f"Reached maximum round count {max_rounds}, stopping.")
             break
 
         time.sleep(max(0.0, sleep_between_rounds))
 
         # If COMPLETE, run verification callback
         if reason == "COMPLETE":
-            print("\n[info] Received COMPLETE signal.")
+            logging.debug(f"Received COMPLETE signal.")
             if on_complete:
                 if on_complete():
                     # Verification passed
                     break
                 else:
                     # Verification failed, resend prompt
-                    print("[info] Verification failed, resending prompt...")
+                    logging.debug(f"Verification failed, resending prompt...")
                     rounds += 1
                     round_start = time.time()
                     stdout, reason, returncode = run_claude_once(base + [prompt], env=env, cwd=cwd)
@@ -263,7 +262,7 @@ def run_claude_session(
 
         # If SELECTED_TARGET_COMPLETE, continue to next target
         if reason == "SELECTED_TARGET_COMPLETE":
-            print("\n[info] Received SELECTED_TARGET_COMPLETE signal, continuing to next target...")
+            logging.debug(f"Received SELECTED_TARGET_COMPLETE signal, continuing to next target...")
 
         rounds += 1
 
@@ -273,10 +272,10 @@ def run_claude_session(
         # Continue with prompt again if reason is None or need to reset session
         round_start = time.time()
         if reason is None:
-            print("[info] No END_REASON detected, continuing with prompt...")
+            logging.debug(f"No END_REASON detected, continuing with prompt...")
             stdout, reason, returncode = run_claude_once(base + [prompt], env=env, cwd=cwd)
         elif should_reset_session:
-            print(f"[info] Resetting session after {consecutive_limits} consecutive LIMITs...")
+            logging.debug(f"Resetting session after {consecutive_limits} consecutive LIMITs...")
             stdout, reason, returncode = run_claude_once(base + [prompt], env=env, cwd=cwd)
             consecutive_limits = 0  # Reset counter after starting new session
         else:
@@ -340,7 +339,7 @@ def run_task(task: TaskMetadata) -> TaskResult:
         tracker = None
         if task.track_statements and files_to_track:
             tracker = StatementTracker(files_to_track)
-            print(f"[info] Tracking statements in {len(files_to_track)} file(s)")
+            logging.debug(f"Tracking statements in {len(files_to_track)} file(s)")
 
         # Build verification callback
         def on_complete_callback() -> bool:
@@ -358,23 +357,23 @@ def run_task(task: TaskMetadata) -> TaskResult:
             if not lean_files:
                 return True
 
-            print(f"[info] Verifying {len(lean_files)} .lean files...")
+            logging.debug(f"Verifying {len(lean_files)} .lean files...")
             results = check_lean_files_parallel(lean_files)
 
             # Filter errors based on allow_sorry setting
             if task.allow_sorry:
                 errors = [f for f, e, _, _, _ in results if e]
-                print(f"[info] allow_sorry=True, ignoring sorry warnings")
+                logging.debug(f"allow_sorry=True, ignoring sorry warnings")
             else:
                 errors = [f for f, e, s, _, _ in results if e or s]
 
             if errors:
-                print(f"\n[error] {len(errors)} files have errors{'' if task.allow_sorry else '/sorry'}:")
+                logging.warning(f"{len(errors)} files have errors{'' if task.allow_sorry else '/sorry'}:")
                 for f in errors:
-                    print(f"  - {f}")
+                    logging.warning(f"  - {f}")
                 return False
 
-            print(f"[info] All {len(lean_files)} files verified successfully!")
+            logging.debug(f"All {len(lean_files)} files verified successfully!")
             return True
 
         # Run Claude session
@@ -416,31 +415,31 @@ def run_task(task: TaskMetadata) -> TaskResult:
                 lean_files = find_lean_files(check_path)
 
             if lean_files:
-                print(f"\n[info] Reached limit, performing final verification on {len(lean_files)} .lean files...")
+                logging.debug(f"Reached limit, performing final verification on {len(lean_files)} .lean files...")
                 results = check_lean_files_parallel(lean_files)
 
                 # Filter errors based on allow_sorry setting
                 if task.allow_sorry:
                     errors = [f for f, e, _, _, _ in results if e]
-                    print(f"[info] allow_sorry=True, ignoring sorry warnings")
+                    logging.debug(f"allow_sorry=True, ignoring sorry warnings")
                 else:
                     errors = [f for f, e, s, _, _ in results if e or s]
 
                 if errors:
-                    print(f"[error] {len(errors)} files have errors{'' if task.allow_sorry else '/sorry'}:")
+                    logging.warning(f"{len(errors)} files have errors{'' if task.allow_sorry else '/sorry'}:")
                     for f in errors:
-                        print(f"  - {f}")
+                        logging.warning(f"  - {f}")
                 else:
-                    print(f"[info] All {len(lean_files)} files verified successfully!")
+                    logging.debug(f"All {len(lean_files)} files verified successfully!")
                     # Update end_reason to COMPLETE if verification passed
-                    if not task.allow_sorry: # Only set to COMPLETE if allow_sorry is False (which means the file is indeed done)
+                    if not task.allow_sorry:  # Only set to COMPLETE if allow_sorry is False (which means the file is indeed done)
                         end_reason = "COMPLETE"
 
         # Analyze MCP stats if result_dir is specified
         if task.result_dir and mcp_log_path and mcp_log_path.exists():
             stats_dir = Path(task.result_dir) / task.task_id
             stats_dir.mkdir(parents=True, exist_ok=True)
-            print(f"[info] Generating MCP stats to {stats_dir}")
+            logging.debug(f"Generating MCP stats to {stats_dir}")
             mcp_stats = analyze_mcp_log(str(mcp_log_path), str(stats_dir))
 
         success = end_reason == "COMPLETE"
@@ -450,7 +449,7 @@ def run_task(task: TaskMetadata) -> TaskResult:
         rounds_used = 0
         success = False
         error_message = str(e)
-        print(f"[error] Task failed: {e}", file=sys.stderr)
+        logging.error(f"Task failed: {e}")
 
     end_time = datetime.now()
 
@@ -467,13 +466,13 @@ def run_task(task: TaskMetadata) -> TaskResult:
         statement_changed=statement_changed,
     )
 
-    print(f"\n[info] Task {task.task_id} completed:")
-    print(f"  Success: {result.success}")
-    print(f"  End reason: {result.end_reason}")
-    print(f"  Rounds used: {result.rounds_used}")
-    print(f"  Duration: {result.duration_seconds:.1f}s")
+    logging.debug(f"Task {task.task_id} completed:")
+    logging.debug(f"  Success: {result.success}")
+    logging.debug(f"  End reason: {result.end_reason}")
+    logging.debug(f"  Rounds used: {result.rounds_used}")
+    logging.debug(f"  Duration: {result.duration_seconds:.1f}s")
     if statement_changed:
-        print(f"  Statement changed: Yes")
+        logging.debug(f"  Statement changed: Yes")
 
     # Save final result to JSON if result_dir is specified
     # (Individual round results are already saved immediately during execution)
@@ -486,15 +485,15 @@ def run_task(task: TaskMetadata) -> TaskResult:
         with open(result_file, "w", encoding="utf-8") as f:
             json.dump(result.to_dict(), f, indent=2, ensure_ascii=False)
 
-        print(f"[info] Final result saved to {result_file}")
+        logging.debug(f"Final result saved to {result_file}")
 
     return result
 
 
 def run_tasks(
-    tasks: List[TaskMetadata],
-    parallel: bool = False,
-    max_workers: int = 1,
+        tasks: List[TaskMetadata],
+        parallel: bool = False,
+        max_workers: int = 1,
 ) -> List[TaskResult]:
     """
     Execute multiple tasks.
@@ -514,9 +513,9 @@ def run_tasks(
         # Sequential execution
         results = []
         for i, task in enumerate(tasks, 1):
-            print(f"\n{'=' * 60}")
-            print(f"[{i}/{len(tasks)}] Running task: {task.task_id}")
-            print("=" * 60)
+            # print(f"\n{'=' * 60}")
+            logging.debug(f"[{i}/{len(tasks)}] Running task: {task.task_id}")
+            # print("=" * 60)
             result = run_task(task)
             results.append(result)
         return results
