@@ -67,7 +67,12 @@ def run_claude_once(
     sys.stdout.write(out)
     sys.stdout.flush()
 
-    m = PAT_REASON.search(out)
+    if "--output-format" in args and args[args.index("--output-format") + 1] == "json":
+        out = json.loads(out)
+        m = PAT_REASON.search(out["result"])
+    else:
+        m = PAT_REASON.search(out)
+
     reason = m.group(1).upper() if m else None
     return out, reason, cp.returncode
 
@@ -137,7 +142,7 @@ def run_claude_session(
     statement_error = False
     initial_line_counts = get_line_counts(files_to_track) if files_to_track else {}
 
-    def record_round(round_num: int, stdout: str, reason: Optional[str], returncode: int,
+    def record_round(round_num: int, stdout: str | dict, reason: Optional[str], returncode: int,
                      duration: float) -> RoundResult:
         """Record a round result and check for statement changes."""
         nonlocal statement_error

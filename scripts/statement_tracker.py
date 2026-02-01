@@ -138,7 +138,7 @@ class StatementTracker:
 class RoundResult:
     """Result of a single run_claude_once call."""
     round_number: int
-    stdout: str
+    stdout: str | dict
     end_reason: Optional[str]  # COMPLETE / LIMIT / None
     returncode: int
     statement_changes: List[StatementChange] = field(default_factory=list)
@@ -153,6 +153,7 @@ class RoundResult:
         """Convert to dictionary for JSON serialization."""
         return {
             "round_number": self.round_number,
+            "stdout": self.stdout,
             "end_reason": self.end_reason,
             "returncode": self.returncode,
             "duration_seconds": self.duration_seconds,
